@@ -10,7 +10,7 @@
     --black: #080810;
     --deep: #0d0d1a;
     --purple: #6c3fc9;
-    --purple-light: #E6E6FA;
+    --purple-light: #9b6ef3;
     --blue: #2563eb;
     --blue-light: #60a5fa;
     --nebula: #c084fc;
@@ -397,7 +397,46 @@
     border: 1px solid rgba(108,63,201,0.25);
   }
 
-  /* ADMIN PANEL */
+  /* VIDEO LIGHTBOX */
+  .video-overlay {
+    display: none; position: fixed; inset: 0; z-index: 700;
+    background: rgba(0,0,0,0.92); backdrop-filter: blur(20px);
+    align-items: center; justify-content: center;
+  }
+  .video-overlay.open { display: flex; }
+  .video-wrap {
+    position: relative; width: 90vw; max-width: 1100px;
+    aspect-ratio: 16/9;
+    border-radius: 16px; overflow: hidden;
+    box-shadow: 0 40px 100px rgba(0,0,0,0.8), 0 0 0 1px rgba(108,63,201,0.25);
+    animation: videoIn 0.35s cubic-bezier(0.23,1,0.32,1) forwards;
+  }
+  @keyframes videoIn {
+    from { opacity: 0; transform: scale(0.93) translateY(20px); }
+    to   { opacity: 1; transform: scale(1) translateY(0); }
+  }
+  .video-wrap iframe {
+    width: 100%; height: 100%; border: none; display: block;
+  }
+  .video-close {
+    position: absolute; top: -44px; right: 0;
+    background: none; border: none; cursor: none;
+    font-family: 'Space Mono', monospace; font-size: 0.7rem;
+    letter-spacing: 0.12em; text-transform: uppercase;
+    color: rgba(255,255,255,0.5); transition: color 0.2s;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .video-close:hover { color: white; }
+
+  /* Card thumbnail with video — show poster-style gradient + title overlay */
+  .card-thumb.has-video { cursor: none; }
+  .card-thumb.has-video .card-thumb-inner { opacity: 0.6; }
+  .card-thumb.has-video .card-play { opacity: 1; }
+  .card-thumb.has-video .card-play-btn {
+    background: rgba(108,63,201,0.5);
+    border-color: rgba(155,110,243,0.8);
+    box-shadow: 0 0 24px rgba(108,63,201,0.6);
+  }
   .admin-overlay {
     display: none; position: fixed; inset: 0; z-index: 500;
     background: rgba(0,0,0,0.85); backdrop-filter: blur(16px);
@@ -781,6 +820,14 @@
   <div class="footer-orbit">somewhere between earth and everywhere else</div>
 </footer>
 
+<!-- VIDEO LIGHTBOX -->
+<div class="video-overlay" id="videoOverlay">
+  <div class="video-wrap" id="videoWrap">
+    <button class="video-close" onclick="closeVideo()">✕ &nbsp;Close</button>
+    <iframe id="videoFrame" src="" allowfullscreen allow="autoplay; fullscreen"></iframe>
+  </div>
+</div>
+
 <!-- LOGIN MODAL -->
 <div class="admin-overlay" id="loginOverlay">
   <div class="admin-modal">
@@ -957,6 +1004,34 @@ function checkEmpty(grid) {
   if(g) checkEmpty(g);
 });
 
+// ───── VIDEO ─────
+function parseEmbedUrl(raw) {
+  if (!raw) return '';
+  raw = raw.trim();
+  // Already a proper embed URL — pass through
+  if (raw.includes('player.vimeo.com') || raw.includes('youtube.com/embed')) return raw;
+  // Vimeo: vimeo.com/123456789 or vimeo.com/channels/x/123456789
+  const vimeoMatch = raw.match(/vimeo\.com\/(?:.*\/)?(\d+)/);
+  if (vimeoMatch) return `https://player.vimeo.com/video/${vimeoMatch[1]}?autoplay=1&color=9b6ef3&title=0&byline=0&portrait=0`;
+  // YouTube: watch?v=, youtu.be/, shorts/
+  const ytMatch = raw.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+  if (ytMatch) return `https://www.youtube.com/embed/${ytMatch[1]}?autoplay=1&rel=0`;
+  return raw;
+}
+
+function openVideo(embedUrl) {
+  const frame = document.getElementById('videoFrame');
+  frame.src = embedUrl;
+  document.getElementById('videoOverlay').classList.add('open');
+}
+function closeVideo() {
+  document.getElementById('videoOverlay').classList.remove('open');
+  document.getElementById('videoFrame').src = '';
+}
+document.getElementById('videoOverlay').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeVideo();
+});
+
 // ───── UPLOAD ─────
 let currentSection = 'studio';
 function openUpload() { document.getElementById('uploadOverlay').classList.add('open'); }
@@ -976,6 +1051,8 @@ function addProject() {
   const desc = document.getElementById('upDesc').value.trim();
   const tools = document.getElementById('upTools').value.trim();
   const year = document.getElementById('upYear').value.trim();
+  const rawUrl = document.getElementById('upUrl').value.trim();
+  const embedUrl = parseEmbedUrl(rawUrl);
   if(!title) { showToast('Add a title first'); return; }
   const grids = { studio:'studioGrid', adspecs:'adspecsGrid', forfun:'forfunGrid' };
   const gridEl = document.getElementById(grids[currentSection]);
@@ -983,9 +1060,10 @@ function addProject() {
   const labels = {'studio':'Studio Work','adspecs':'Ad Spec','forfun':'For Fun'};
   const card = document.createElement('div');
   card.className = 'card';
+  const hasVideo = !!embedUrl;
   card.innerHTML = `
     <button class="card-delete" title="Delete" onclick="deleteCard(this.closest('.card'))">🗑</button>
-    <div class="card-thumb">
+    <div class="card-thumb${hasVideo ? ' has-video' : ''}"${hasVideo ? ` onclick="openVideo('${embedUrl}')"` : ''}>
       <div class="card-thumb-inner" style="background:linear-gradient(135deg,rgba(108,63,201,0.25),rgba(37,99,235,0.2));">${emojis[currentSection]||'✨'}</div>
       <div class="card-play"><div class="card-play-btn">▶</div></div>
     </div>
@@ -998,14 +1076,13 @@ function addProject() {
         ${tools?`<span class="card-dot"></span><span class="card-tools">${tools}</span>`:''}
       </div>
     </div>`;
-  // Remove empty state if present
   const es = gridEl.querySelector('.empty-state');
   if(es) es.remove();
   gridEl.appendChild(card);
   card.addEventListener('mouseenter', () => ring.classList.add('hovered'));
   card.addEventListener('mouseleave', () => ring.classList.remove('hovered'));
   closeUpload();
-  showToast('Project added ✦');
+  showToast(hasVideo ? 'Project added — video ready ✦' : 'Project added ✦');
   ['upTitle','upDesc','upTools','upYear','upUrl'].forEach(id => document.getElementById(id).value='');
 }
 
